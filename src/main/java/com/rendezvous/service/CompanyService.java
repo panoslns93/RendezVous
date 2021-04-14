@@ -1,8 +1,3 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package com.rendezvous.service;
 
 import com.rendezvous.customexception.CompanyIdNotFound;
@@ -23,7 +18,6 @@ import com.rendezvous.model.WorkDayHours;
 import com.rendezvous.model.WorkWeek;
 import com.rendezvous.repository.AppointmentRepository;
 import com.rendezvous.repository.AvailabilityRepository;
-import com.rendezvous.repository.ClientRepository;
 import com.rendezvous.repository.CompanyRepository;
 import com.rendezvous.repository.RoleRepository;
 import java.time.LocalDate;
@@ -33,7 +27,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -41,7 +34,6 @@ import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.provisioning.JdbcUserDetailsManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -70,6 +62,16 @@ public class CompanyService {
         Optional<Company> company = companyRepository.findById(id);
         company.orElseThrow(() -> new CompanyIdNotFound("Company " + id + " not found!"));
         return company.get();
+    }
+
+    public Company findCompanyByUserId(Integer userId) throws CompanyIdNotFound {
+        Optional<Company> comp = companyRepository.findCompanyByUserId(userId);
+        return comp.orElseThrow(() -> new CompanyIdNotFound("Company with userID=" + userId + " not found!"));
+    }
+
+    public Company findCompanyByUserEmail(String email) throws CompanyIdNotFound {
+        Optional<Company> comp = companyRepository.findCompanyByUserEmail(email);
+        return comp.orElseThrow(() -> new CompanyIdNotFound("Company with email=" + email + " not found!"));
     }
 
     public void saveCompany(Company company) {
@@ -117,7 +119,11 @@ public class CompanyService {
             if (hours != null) {
                 BusinessHoursGroup businessHoursGroup = new BusinessHoursGroup();
 
-                businessHoursGroup.getDaysOfWeek().add(weekDay);
+                if (weekDay == 7) {
+                    businessHoursGroup.getDaysOfWeek().add(0);
+                } else {
+                    businessHoursGroup.getDaysOfWeek().add(weekDay);
+                }
                 businessHoursGroup.setStartTime(hours.getStartTime());
                 businessHoursGroup.setEndTime(hours.getCloseTime());
 
@@ -198,19 +204,8 @@ public class CompanyService {
         WorkWeek workWeek = findWorkingHoursByCompany(company);
         availabilityCalendarProperties.setBusinessHours(getBusinessHours(workWeek));
 
-        //finding and adding company events
+        //blockDates will hold all events in the calendar(client events and company's blocked events with other clients)
         List<BlockDate> blockDates = new ArrayList();
-
-        List<Appointment> companyAppointments = appointmentRepository.findByCompany(company);
-
-        for (Appointment ap : companyAppointments) {
-            LocalDateTime startTime = ap.getDate().atStartOfDay();
-            startTime = startTime.plusHours(ap.getTimeslot());
-
-            LocalDateTime endTime = startTime.plusHours(1);
-
-            blockDates.add(new BlockDate("Date Unavailable", startTime, endTime));
-        }
 
         //finding and adding client events
         List<Appointment> clientAppointments = appointmentRepository.findByClient(client);
@@ -223,13 +218,25 @@ public class CompanyService {
 
             String title = ap.getCompany().getDisplayName();
 
-            //testing if the client already have an appointment with the company, to make sure the 2 appointments wont show up at the same time
-            BlockDate alreadyExistingAppointment = new BlockDate("Date Unavailable", startTime, endTime);
-            if (blockDates.contains(alreadyExistingAppointment)) {
-                int indexOf = blockDates.indexOf(alreadyExistingAppointment);
-                blockDates.set(indexOf, new BlockDate("Appointment with " + title + " already exists", startTime, endTime));
+            if (title.equals(company.getDisplayName())) {
+                blockDates.add(new BlockDate("Appointment with " + title + " booked", startTime, endTime));
             } else {
                 blockDates.add(new BlockDate(title, startTime, endTime));
+            }
+        }
+
+        //finding and adding company events
+        List<Appointment> companyAppointments = appointmentRepository.findByCompany(company);
+
+        for (Appointment ap : companyAppointments) {
+            LocalDateTime startTime = ap.getDate().atStartOfDay();
+            startTime = startTime.plusHours(ap.getTimeslot());
+
+            LocalDateTime endTime = startTime.plusHours(1);
+
+            //making sure client dates are showing above company dates
+            if (!blockDates.contains(new BlockDate("", startTime, endTime))) {
+                blockDates.add(new BlockDate("Unavailable", startTime, endTime));
             }
         }
 
@@ -237,28 +244,27 @@ public class CompanyService {
         return availabilityCalendarProperties;
     }
 
-
     public Set<SearchResult> companySearch(String searchTerm, String category) {
-        
+
         Set<SearchResult> results = new HashSet<>();
         List<Company> companies;
         if (searchTerm.trim().equals("")) {
             companies = companyRepository.findAll();
             for (Company comp : companies) {
-                if (category.equals("All") || (comp.getCategory()!=null && category.equalsIgnoreCase(comp.getCategory().getCategory()))) {
+                if (category.equals("All") || (comp.getCategory() != null && Integer.parseInt(category) == comp.getCategory().getId())) {
                     results.add(new SearchResult(comp.getId(), comp.getDisplayName(), comp.getAddrStr(), comp.getAddrNo(), comp.getAddrCity(), comp.getTel()));
                 }
             }
         } else {
-        String[] searchTerms = searchTerm.split(" ");
-        for (String a : searchTerms) {
-            companies = companyRepository.findByDisplayNameContainingIgnoreCaseOrAddrCityContainingIgnoreCaseOrTelContaining(a, a, a);
-            for (Company comp : companies) {
-                if (category.equals("All") || (comp.getCategory()!=null && category.equalsIgnoreCase(comp.getCategory().getCategory()))) {
-                    results.add(new SearchResult(comp.getId(), comp.getDisplayName(), comp.getAddrStr(), comp.getAddrNo(), comp.getAddrCity(), comp.getTel()));
+            String[] searchTerms = searchTerm.split(" ");
+            for (String a : searchTerms) {
+                companies = companyRepository.findByDisplayNameContainingIgnoreCaseOrAddrCityContainingIgnoreCaseOrTelContaining(a, a, a);
+                for (Company comp : companies) {
+                    if (category.equals("All") || (comp.getCategory() != null && Integer.parseInt(category) == comp.getCategory().getId())) {
+                        results.add(new SearchResult(comp.getId(), comp.getDisplayName(), comp.getAddrStr(), comp.getAddrNo(), comp.getAddrCity(), comp.getTel()));
+                    }
                 }
             }
-        }
         }
         return results;
     }
@@ -274,11 +280,11 @@ public class CompanyService {
 
         //convert getDayOfWeek() output to db availability table 0 based working hours
         //getDayOfWeek().getValue() output 1-7(starting Mondey), db saves 0-6(starting Sunday)
-        int dayNumber = appointmentTimestamp.getDayOfWeek().getValue() == 7 ? 0 : appointmentTimestamp.getDayOfWeek().getValue();
+//        System.out.println(appointmentTimestamp.getDayOfWeek().getValue());
+//        int dayNumber = appointmentTimestamp.getDayOfWeek().getValue() == 7 ? 0 : appointmentTimestamp.getDayOfWeek().getValue();
 
-        
-        Optional<Availability> dayOpt = availabilityRepository.findByCompanyAndWeekDay(company, dayNumber);
-        
+        Optional<Availability> dayOpt = availabilityRepository.findByCompanyAndWeekDay(company, appointmentTimestamp.getDayOfWeek().getValue());
+
         if (!dayOpt.isPresent()) {
             //no Availability entry found for the spesific week day, so the company is closed for the entire day
             return false;
@@ -287,7 +293,7 @@ public class CompanyService {
             LocalTime openTime = day.getOpenTime();
             LocalTime closeTime = day.getCloseTime();
             LocalTime requestedTime = appointmentTimestamp.toLocalTime();
-            
+
             if (!openTime.isAfter(requestedTime) && closeTime.isAfter(requestedTime)) {
                 //open in the requested week day, AND inside working hours
                 return true;
@@ -298,9 +304,23 @@ public class CompanyService {
         }
 
     }
-    
+
     public void setPremiumStatus(Company company) {
         companyRepository.savePremiumStatus(company.getId());
+    }
+
+    public List<String> findAllCities() {
+        return companyRepository.findAllCities().orElseThrow(() -> new UsernameNotFoundException("Cities not found!"));
+    }
+
+    public Set<SearchResult> filterByCity(Set<SearchResult> companies, String city) {
+        Set<SearchResult> comps = new HashSet<>();
+        for (SearchResult c : companies) {
+            if (c.getAddrCity().trim().equals(city.trim())) {
+                comps.add(c);
+            }
+        }
+        return comps;
     }
 
 }

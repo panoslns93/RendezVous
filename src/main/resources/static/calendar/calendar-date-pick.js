@@ -1,11 +1,25 @@
 document.addEventListener('DOMContentLoaded', function () {
     $("#alert").hide();
-    document.getElementById('calendar').innerHTML = "Loading Calendar Data";
-    getCalendarDataAndDrawCalendar();
 
-    function getCalendarDataAndDrawCalendar() {
+    var calendarData;
+    var calendar;
+    var defDate;
+
+    drawCalendar();
+
+    function drawCalendar() {
+        getData(function () {
+            defDate = new Date();
+
+            initializeCalendar();
+            $("#loading-container").hide();
+            $("#calendar-container").fadeIn("slow");
+            calendar.render();
+        });
+    }
+
+    function getData(afterLoading) {
         var full = location.protocol + '//' + location.hostname + (location.port ? ':' + location.port : '');
-        var calendarData;
         var comp_id = $("#comp-id").val();
         var xhttp = new XMLHttpRequest();
         xhttp.onreadystatechange = function () {
@@ -15,46 +29,57 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (calendarData.businessHours.length == 0) {
                     calendarData.businessHours = [{daysOfWeek: 1, startTime: "00:00:00", endTime: "00:00:00"}]
                 }
-                console.log("RecievedfromServer>>>> ");
-                console.log(calendarData);
-                drawCalendar(calendarData);
-
+                afterLoading();
             }
         };
-        xhttp.open("GET", full + "/rendezvous/api/v1/client/company/" + comp_id + "/availability", true);
+        xhttp.open("GET", full + "/api/v1/client/company/" + comp_id + "/availability", true);
         xhttp.send();
     }
 
-    function drawCalendar(calendarData) {
+    function initializeCalendar() {
         var calendarEl = document.getElementById('calendar');
         calendarEl.innerHTML = "";
-        var calendar = new FullCalendar.Calendar(calendarEl, {
+        calendar = new FullCalendar.Calendar(calendarEl, {
+            initialDate: defDate,
             businessHours: calendarData.businessHours,
 //                slotMinTime: x.slotMinTime,
 //                slotMaxTime: x.slotMaxTime,
             events: calendarData.blockDates,
             // themeSystem: 'bootstrap',
-            initialView: 'timeGridWeek',
+//            initialView: 'timeGridWeek',
+//            headerToolbar: {
+//                left: 'prev,next today',
+//                center: 'title',
+//                right: ''
+//            },
+            initialView: $(window).width() < 765 ? 'timeGridDay' : 'timeGridWeek',
             headerToolbar: {
                 left: 'prev,next today',
                 center: 'title',
-                right: ''
+                right: '',
             },
             firstDay: 1,
             allDaySlot: false,
             slotDuration: '01:00:00',
             // scrollTime: '07:00:00',
             expandRows: true,
-            // contentHeight: 1000,
+            contentHeight: 1500,
             // displayEventTime: false,
             selectConstraint: "businessHours",
+            longPressDelay: 25,
             select: function (info) {
+                let startTime = new Date(info.start);
+                startTime.setHours(startTime.getHours() + (startTime.getTimezoneOffset() / 60));
+                let endTime = new Date(info.end);
+                endTime.setHours(endTime.getHours() + (endTime.getTimezoneOffset() / 60));
                 $("#hdate").val(info.start);
                 $(".modal-title").text("Confirmation");
                 $(".modal-body p").html(
                         "Are you sure?" +
                         "<br/>" +
-                        info.start
+                        startTime.toLocaleTimeString() +
+                        " - " +
+                        endTime.toLocaleTimeString()
                         );
                 $('#myModal').modal('show');
             },
@@ -64,19 +89,31 @@ document.addEventListener('DOMContentLoaded', function () {
             eventBorderColor: 'gray',
             eventTextColor: 'white',
             timeZone: 'Europe/Athens',
-            // eventDisplay: 'block',
             eventContent: function (arg) {
-                return arg.event.title;
-            },
+                if (arg.event.title.startsWith("Appointment with")) {
+                    arg.backgroundColor = "#3788D8"
+                } else if (arg.event.title.startsWith("Unavailable")) {
+                    arg.backgroundColor = "gray"
+                } else {
+                    arg.backgroundColor = "#6fafed"
+                }
+                return {html: '<div class="row h-100"><p class="col-sm-12 my-auto text-center">' + arg.event.title + '</p></div>'}
+            }
         });
-        calendar.render();
     }
+
+    $(window).on("orientationchange", function (event) {
+        setTimeout(function () {
+            initializeCalendar();
+            calendar.render();
+        }, 200);
+    });
 
     $("#submitDateToServer").click(function () {
         $('html, body').css("cursor", "wait");
         var full = location.protocol + '//' + location.hostname + (location.port ? ':' + location.port : '');
 
-        $.ajax(full + "/rendezvous/api/v1/client/request-app",
+        $.ajax(full + "/api/v1/client/request-app",
                 {type: 'POST',
                     contentType: 'application/json',
                     data: JSON.stringify(
@@ -92,7 +129,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
                         $('#alert').show();
                         $('#alert').html("Your appointment has been successfully created")
-                        getCalendarDataAndDrawCalendar();
+
+                        getData(function () {
+                            defDate = calendar.currentData.currentDate
+
+                            initializeCalendar();
+                            $("#loading-container").hide();
+                            $("#calendar-container").fadeIn("slow");
+                            calendar.render();
+                        });
                     },
                     error: function (jqXhr, textStatus, errorMessage) { // error callback 
                         $('html, body').css("cursor", "auto");
@@ -100,7 +145,11 @@ document.addEventListener('DOMContentLoaded', function () {
                         $('#alert').addClass("alert-warning");
 
                         $('#alert').show();
-                        $('#alert').html("Your appointment request could not be completed. Refresh the page and try again")
+                        if (jqXhr.responseText === "past-date") {
+                            $('#alert').html("You can not book an appointment in past date");
+                        } else {
+                            $('#alert').html("Your appointment request could not be completed. Refresh the page and try again");
+                        }
                     }
                 });
     });

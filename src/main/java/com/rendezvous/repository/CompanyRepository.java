@@ -14,6 +14,8 @@ public interface CompanyRepository extends JpaRepository<Company, Integer> {
 
     Optional<Company> findCompanyByUserEmail(String email);
 
+    Optional<Company> findCompanyByUserId(int id);
+
     Optional<Company> findById(int id);
 
     List<Company> findByDisplayNameContainingIgnoreCaseOrAddrCityContainingIgnoreCaseOrTelContaining(String term1, String term2, String term3);
@@ -28,4 +30,9 @@ public interface CompanyRepository extends JpaRepository<Company, Integer> {
     )
     void savePremiumStatus(Integer id);
 
+    @Query(
+            value = "SELECT DISTINCT addr_City from company",
+            nativeQuery = true
+    )
+    Optional<List<String>> findAllCities();
 }

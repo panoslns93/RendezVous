@@ -9,7 +9,6 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.NoOpPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.JdbcUserDetailsManager;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
@@ -33,9 +32,6 @@ public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
         auth.userDetailsService(userDetailsService);
     }
 
-    /*
-    Setup the authorization for the different APIs
-     */
     @Override
     protected void configure(HttpSecurity http) throws Exception {
         http
@@ -45,6 +41,8 @@ public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
                 .antMatchers("/api/v1/client/**").hasRole("CLIENT")
                 .antMatchers("/company/**").hasRole("COMPANY")
                 .antMatchers("/api/v1/company/**").hasRole("COMPANY")
+                .antMatchers("/api/v1/**").hasAnyRole("CLIENT", "COMPANY")
+                .antMatchers("/secured/**").hasAnyRole("CLIENT", "COMPANY")
                 .antMatchers("/").permitAll()
                 .and()
                 .formLogin()

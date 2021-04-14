@@ -1,21 +1,13 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package com.rendezvous.model;
 
 import java.time.LocalDateTime;
 import java.util.Objects;
 
-/**
- *
- * @author Leyteris
- */
 public class BlockDate {
-    private String title;    
+
+    private String title;
     private LocalDateTime start;
-    private LocalDateTime end; 
+    private LocalDateTime end;
 
     public BlockDate() {
     }
@@ -71,9 +63,6 @@ public class BlockDate {
             return false;
         }
         final BlockDate other = (BlockDate) obj;
-        if (!Objects.equals(this.title, other.title)) {
-            return false;
-        }
         if (!Objects.equals(this.start, other.start)) {
             return false;
         }
@@ -82,6 +71,5 @@ public class BlockDate {
         }
         return true;
     }
-    
-    
+
 }

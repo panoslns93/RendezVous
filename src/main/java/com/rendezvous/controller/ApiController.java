@@ -1,39 +1,39 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package com.rendezvous.controller;
 
 import com.rendezvous.customexception.ClientIdNotFound;
 import com.rendezvous.customexception.CompanyIdNotFound;
+import com.rendezvous.customexception.ConversationNotFound;
 import com.rendezvous.entity.Client;
 import com.rendezvous.entity.Company;
 import com.rendezvous.entity.Conversation;
 import com.rendezvous.entity.Messages;
+import com.rendezvous.entity.User;
 import com.rendezvous.model.AppointmentRequest;
 import com.rendezvous.model.AvailabilityCalendarProperties;
 import com.rendezvous.model.ClientCalendarProperties;
 import com.rendezvous.model.CompanyCalendarProperties;
-import com.rendezvous.model.JsonMessage;
+import com.rendezvous.model.Message;
 import com.rendezvous.model.SearchResult;
-import com.rendezvous.repository.ConversationRepository;
+import com.rendezvous.model.UserProps;
 import com.rendezvous.service.AppointmentService;
-import com.rendezvous.service.CategoryService;
 import com.rendezvous.service.ClientService;
 import com.rendezvous.service.CompanyService;
+import com.rendezvous.service.ConversationService;
 import com.rendezvous.service.MessagesService;
-import com.rendezvous.util.Conversion;
+import com.rendezvous.service.UserService;
 import java.security.Principal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -42,9 +42,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-//@CrossOrigin
 @RestController
-@RequestMapping("/api/v1/") //todo add /api/v1/client and /api/v1/company in Spring Security
+@RequestMapping("/api/v1/")
 public class ApiController {
 
     @Autowired
@@ -54,11 +53,11 @@ public class ApiController {
     @Autowired
     private AppointmentService appointmentService;
     @Autowired
-    private CategoryService categoryService;
+    private UserService userService;
+    @Autowired
+    private ConversationService conversationService;
     @Autowired
     private MessagesService messagesService;
-    @Autowired
-    private ConversationRepository conversationRepository;
 
     @GetMapping("/client/dates")
     public ResponseEntity<List<ClientCalendarProperties>> fetchClientAppointments() {
@@ -111,6 +110,8 @@ public class ApiController {
     @PostMapping("/client/request-app")
     public ResponseEntity<String> confirmAppointment(Principal principal, @RequestBody AppointmentRequest appointmentRequest) {
         System.out.println(appointmentRequest);
+        System.out.println(appointmentRequest.getAppointmentTimestamp());
+        System.out.println("is requested appointment before now?>>>>>" + appointmentRequest.getAppointmentTimestamp().isBefore(LocalDateTime.now()));
 
         Client client = null;
         Company company = null;
@@ -125,7 +126,6 @@ public class ApiController {
         boolean isClientOccupied = clientService.isOccupied(client, appointmentRequest.getAppointmentTimestamp());
 
         if (isClientOccupied) {
-            System.out.println("Client is occupied>>>>>>>>> " + isClientOccupied);
             return new ResponseEntity(HttpStatus.BAD_REQUEST);
         }
 
@@ -133,15 +133,13 @@ public class ApiController {
         try {
             company = companyService.findCompanyById(appointmentRequest.getCompanyId());
         } catch (CompanyIdNotFound ex) {
-            System.out.println("Company doesnt exists");
             return new ResponseEntity(HttpStatus.BAD_REQUEST);
         }
 
         //check if requested timeslot is inside company's working hour
         boolean isDateInBusinessHours = companyService.isDateInBusinessHours(company, appointmentRequest.getAppointmentTimestamp());
-
+        
         if (!isDateInBusinessHours) {
-            System.out.println("Date in business hours>>>>>>>>> " + isDateInBusinessHours);
             return new ResponseEntity(HttpStatus.BAD_REQUEST);
         }
 
@@ -150,8 +148,15 @@ public class ApiController {
         isCompanyOccupied = companyService.isOccupied(company, appointmentRequest.getAppointmentTimestamp());
 
         if (isCompanyOccupied) {
-            System.out.println("Company is occupied>>>>>>>>> " + isCompanyOccupied);
             return new ResponseEntity(HttpStatus.BAD_REQUEST);
+        }
+
+        //check if requested date is before the current time
+        boolean isRequestedAppointmentInThePast = false;
+        isRequestedAppointmentInThePast = appointmentService.isRequestedAppointmentInThePast(appointmentRequest.getAppointmentTimestamp());
+
+        if (isRequestedAppointmentInThePast) {
+            return new ResponseEntity("past-date", HttpStatus.BAD_REQUEST);
         }
 
         //if no error found in request, then save a new appointment
@@ -160,68 +165,77 @@ public class ApiController {
     }
 
     @GetMapping("client/comp-search")
-    public ResponseEntity<Set<SearchResult>> findCompanies(@RequestParam String searchTerm, @RequestParam String category) {
+    public ResponseEntity<Set<SearchResult>> findCompanies(@RequestParam String searchTerm, @RequestParam String category, @RequestParam String city) {
         Set<SearchResult> results = companyService.companySearch(searchTerm, category);
+        if (!"All".equals(city)) {
+            results = companyService.filterByCity(results, city);
+        }
         return new ResponseEntity<>(results, HttpStatus.OK);
     }
 
-    @GetMapping("client/categories")
-    public ResponseEntity<List<String>> getAllCategories() {
-        List<String> categories = categoryService.getAllCategoriesNames();
-        return new ResponseEntity<>(categories, HttpStatus.OK);
-    }
-
-    @GetMapping("/client/history/{company_id}")
-    public ResponseEntity<List<Messages>> getHistoryClientPerpective(@PathVariable int company_id, Principal principal) throws CompanyIdNotFound {
-        List<Messages> messages = new LinkedList<>();
-
-        Client tempClient = clientService.findClientByEmail(principal.getName());
-        Company tempCompany = companyService.findCompanyById(company_id);
-        Conversation tempConv = conversationRepository.findByClientIdAndCompanyId(tempClient.getId(), company_id);
-
-        if (tempConv == null) {
-            tempConv = new Conversation();
-            tempConv.setClient(tempClient);
-            tempConv.setCompany(tempCompany);
-            conversationRepository.save(tempConv); //create conversation
-        } else {
-            messages = messagesService.findByConversationId(tempConv.getId()).get();            
+    @GetMapping("/conv") //returns list of conversation-partners
+    public ResponseEntity<List<UserProps>> fetchConvPartners(Principal principal) throws ClientIdNotFound, CompanyIdNotFound {
+        User tempUser = userService.findByEmail(principal.getName());
+        List<Conversation> conv = conversationService.findByUserId(tempUser.getId());
+        List<UserProps> convPartners = new LinkedList<>();
+        for (Conversation a : conv) {
+            UserProps up;
+            if (tempUser.getRoleList().get(0).getRole().equals("ROLE_COMPANY")) {
+                Client tempClient = clientService.findClientByUserId(a.getPartnerId(tempUser.getId()).getId());
+                up = new UserProps(tempClient.getFname(), tempClient.getLname(), tempClient.getUser().getEmail());
+            } else {
+                Company comp = companyService.findCompanyByUserId(a.getPartnerId(tempUser.getId()).getId());
+                up = new UserProps(comp.getFname(), comp.getLname(), comp.getUser().getEmail(), comp.getDisplayName());
+            }
+            convPartners.add(up);
         }
-        return new ResponseEntity<>(messages, HttpStatus.OK);
+        return new ResponseEntity<>(convPartners, HttpStatus.OK);
     }
 
-    @PostMapping("/client/history")
-    public ResponseEntity addClientMessageToHistory(@RequestBody Messages message, Principal principal) {    
-        
-        Conversation conv = conversationRepository.findById(message.getConversationId()).get();
-        message.setTimestamp(Conversion.adjustTime(message.getTimestamp()));
-        messagesService.save(message, conv);
+    @GetMapping("/myprops") // send user information to himself
+    public ResponseEntity<UserProps> fetchMyData(Principal principal) throws ClientIdNotFound, CompanyIdNotFound {
+        User tempUser = userService.findByEmail(principal.getName());
+        UserProps up;
+        if (tempUser.getRoleList().get(0).getRole().equals("ROLE_CLIENT")) {
+            Client tempClient = clientService.findClientByUserEmail(principal.getName());
+            System.out.println("client found:" + tempClient.toString());
+            up = new UserProps(tempClient.getFname(), tempClient.getLname(), tempClient.getUser().getEmail());
+        } else {
+            Company comp = companyService.findCompanyByUserEmail(principal.getName());
+            up = new UserProps(comp.getFname(), comp.getLname(), comp.getUser().getEmail(), comp.getDisplayName());
+        }
+        return new ResponseEntity<>(up, HttpStatus.OK);
+    }
+
+    @GetMapping("/load/{userEmail}") // loads messages with particular conversation-partner
+    public ResponseEntity<List<Message>> fetchMessages(@PathVariable String userEmail, Principal principal) throws ConversationNotFound {
+        User tempUser = userService.findByEmail(principal.getName());
+        User otherUser = userService.findByEmail(userEmail);
+        Optional<Conversation> tempConv = conversationService.findConversation(tempUser.getId(), otherUser.getId());
+        List<Message> msgsToSend = new LinkedList<>();
+        if (tempConv.isPresent()) {
+            List<Messages> msgs = messagesService.findByConversationId(tempConv.get().getId()).get();
+            for (Messages a : msgs) {
+                String sender = tempUser.getId() == a.getUserId() ? principal.getName() : userEmail;
+                Message om = new Message(sender, a.getMessage(), a.getTimestamp().toString());
+                msgsToSend.add(om);
+            }
+        } else {
+            conversationService.save(new Conversation(tempUser, otherUser));
+        }
+        return new ResponseEntity<>(msgsToSend, HttpStatus.OK);
+    }
+
+    @DeleteMapping("client/delete-app")
+    public ResponseEntity deleteAppointment(Principal principal, @RequestBody LocalDateTime dateTimeToBeDeleted) {
+        Client client = clientService.findClientByEmail(principal.getName());
+        int timeslot = dateTimeToBeDeleted.getHour();
+        LocalDate appDate = dateTimeToBeDeleted.toLocalDate();
+        if (!appointmentService.existsByClientAndDateAndTimeslot(client, appDate, timeslot)) {
+            return new ResponseEntity(HttpStatus.BAD_REQUEST);
+        }
+        appointmentService.deleteByClientAndDateAndTimeslot(client, appDate, timeslot);
         return new ResponseEntity(HttpStatus.OK);
     }
 
-    @GetMapping("/company/history/{client_id}")
-    public ResponseEntity<List<Messages>> getHistoryCompanyPerpective(@PathVariable int client_id, Principal principal) throws ClientIdNotFound {
-        List<Messages> messages = new LinkedList<>();
-        Company tempComp = companyService.findCompanyByEmail(principal.getName());
-        Client tempClient = clientService.findClientById(client_id);
-        Conversation tempConv = conversationRepository.findByClientIdAndCompanyId(client_id, tempComp.getId());
-
-        if (tempConv == null) {
-            tempConv = new Conversation();
-            tempConv.setClient(tempClient);
-            tempConv.setCompany(tempComp);
-            conversationRepository.save(tempConv); //create conversation
-        } else {
-            messages = messagesService.findByConversationId(tempConv.getId()).get();           
-        }
-        return new ResponseEntity<>(messages, HttpStatus.OK);
-    }
-
-    @PostMapping("/company/history")
-    public ResponseEntity addCompanyMessageToHistory(@RequestBody Messages message, Principal principal) {
-        Conversation conv = conversationRepository.findById(message.getConversationId()).get();
-        message.setTimestamp(Conversion.adjustTime(message.getTimestamp()));
-        messagesService.save(message, conv);
-        return new ResponseEntity( HttpStatus.OK);
-    }
 }

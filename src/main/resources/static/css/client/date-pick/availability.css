@@ -1,0 +1,66 @@
+.fc-timegrid-slot:hover {
+    cursor: pointer;
+}
+#calendar .fc-non-business {
+    background: #706b6b56;
+}
+
+body {
+    display: grid;
+    min-height: 100vh;
+    height: 100%;
+    grid-template-rows: auto 1fr auto;
+}
+
+#calendar-container {
+    display: none;
+}
+
+.legend-box {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+}
+
+p{
+    display: inline-block;
+}
+
+#slot-available {
+    border: 1px solid black;
+    background-color: #F1F1F1;
+}
+#slot-existing-with-comp {
+    background-color: #3788D8;
+}
+#slot-existing-with-other-comp {
+    background-color: #6FAFED;
+}
+#slot-unavailable {
+    background-color: #808080;
+}
+#slot-of-working-hours {
+    background-color: #C6C4C4;
+}
+.modal-content{
+    background-color: #24273a;
+    color:white;
+}
+#xButton {
+    color:white
+}
+#submitDateToServer{
+    background-color: green;
+    color:white;
+    border-color: green;
+}
+#cancelModalBtn{
+    color:white;
+}
+.modal-footer{
+    border-top:none;
+}
+
+
+
+

@@ -11,38 +11,42 @@ document.addEventListener('DOMContentLoaded', function () {
             if (calendarData.businessHours.length == 0) {
                 calendarData.businessHours = [{daysOfWeek: 1, startTime: "00:00:00", endTime: "00:00:00"}]
             }
-            drawCalendar(calendarData);
-            console.log(calendarData.businessHours);
+            drawCalendar();
         }
     };
-    xhttp.open("GET", full + "/rendezvous/api/v1/company/dates", true);
+    xhttp.open("GET", full + "/api/v1/company/dates", true);
     xhttp.send();
 
-    function drawCalendar(calendarData) {
+    function drawCalendar() {
         var calendarEl = document.getElementById('calendar');
         calendarEl.innerHTML = "";
         var calendar = new FullCalendar.Calendar(calendarEl, {
             // themeSystem: 'bootstrap',
-            initialView: 'timeGridWeek',
+            initialView: $(window).width() < 765 ? 'timeGridDay' : 'timeGridWeek',
             headerToolbar: {
                 left: 'prev,next today',
                 center: 'title',
-                right: 'dayGridMonth,timeGridWeek,timeGridDay'
+                right: $(window).width() < 765 ? '' : 'dayGridMonth,timeGridWeek',
             },
             firstDay: 1,
             allDaySlot: false,
             slotDuration: '01:00:00',
             // scrollTime: '07:00:00',
             expandRows: true,
-            contentHeight: 1000,
+            contentHeight: 1500,
             displayEventTime: false,
             timeZone: 'Europe/Athens',
             eventClick: function (info) {
+                let startTime = new Date(info.event.start);
+                startTime.setHours(startTime.getHours() + (startTime.getTimezoneOffset() / 60));
+                let endTime = new Date(info.event.end);
+                endTime.setHours(endTime.getHours() + (endTime.getTimezoneOffset() / 60));
+
                 $(".modal-title").text(info.event.title);
                 $(".modal-body p").html(
-                        info.event.start.toLocaleTimeString() +
+                        startTime.toLocaleTimeString() +
                         " - " +
-                        info.event.end.toLocaleTimeString() +
+                        endTime.toLocaleTimeString() +
                         "<br/><br/>Tel.:" +
                         info.event.extendedProps.tel
                         );
@@ -53,9 +57,17 @@ document.addEventListener('DOMContentLoaded', function () {
             businessHours: calendarData.businessHours,
 //            slotMinTime: "08:00:00", //na to allazoume dinamika me vasi to orario
 //            slotMaxTime: "18:00:00", //na to allazoume dinamika me vasi to orario
-            events: calendarData.events
+            events: calendarData.events,
+            eventContent: function (arg) {
+                return {html: '<div class="row h-100"><p class="col-sm-12 my-auto text-center text-wrap">' + arg.event.title + '</p></div>'}
+            },
         });
-
+        $("#loading-container").hide();
+        $("#calendar-container").fadeIn("slow");
         calendar.render();
     }
+
+    $(window).on("orientationchange", function (event) {
+        setTimeout(drawCalendar, 100);
+    });
 });

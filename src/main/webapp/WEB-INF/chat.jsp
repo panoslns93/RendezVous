@@ -1,39 +1,20 @@
-
-<!------ Include the above in your HEAD tag ---------->
-
-<!DOCTYPE html>
-<html>
-    <head>
-        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-        <link href="//netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap.min.css" rel="stylesheet" id="bootstrap-css">
-        <script src="//netdna.bootstrapcdn.com/bootstrap/3.0.0/js/bootstrap.min.js"></script>
-        <link rel="stylesheet" href="/rendezvous/chat/styles.css">
-        <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.js"></script>
-        
-    </head>
-    <body>
-        <input type="hidden" id="userrole" value="${role}"/>
-        <input type="hidden" id="me" value="${me}"/>
-        <input type="hidden" id="you" value="${you}"/>
-        <input type="hidden" id="myuid" value="${myuid}"/>
-        <input type="hidden" id="convId" value="${convId}"/>
-        <input type="hidden" id="partnerId" value="${id}"/>
-        
-        <div class="col-sm-3 col-sm-offset-4 frame">
-            <ul></ul>
-            <div>
-                <div class="msj-rta macro">                        
-                    <div class="text text-r" style="background:whitesmoke !important">
-                        <input class="mytext" placeholder="Type a message"/>
-                    </div> 
-
-                </div>
-                <div style="padding:10px;">
-                    <span class="glyphicon glyphicon-share-alt"></span>
-                </div>                
-            </div>
+<div id='whatsapp-chat' class='hideCh'>
+    <div class='header-chat'>
+        <div class='head-home'>
+            <p>Active conversations</p></div>
+        <div class='get-new hideCh'><div id='get-label'></div><div id='get-nama'></div></div></div>
+    <div class='home-chat'>
+        <div id="partnerframe">
+        <!-- Active conversations --> 
         </div>
-        <script src="${pageContext.request.contextPath}/chat/chat.js"></script>
-    </body>
-</html>
+        <div class='blanter-msg'></div></div>
+    <div class='start-chat hideCh'>
+        <div id="msgframe">
+            <!-- messages go here -->
+        </div>
+        <div class='blanter-msg'><textarea id='chat-input' placeholder='Write a response' maxlength='120' rows='1'></textarea>
+            <a id='send-it'>Send</a></div></div>
+    <a class='close-chat' >×</a>
+</div>
+<a class='blantershow-chat' title='Show Chat'>Chat</a>
+<script src="/chat/chat.js"></script>

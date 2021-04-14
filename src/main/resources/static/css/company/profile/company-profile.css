@@ -1,0 +1,48 @@
+body {
+    display: grid;
+    min-height: 100vh;
+    height: 100%;
+    grid-template-rows: auto 1fr auto;
+    background-color: #2f3438;
+}
+.container profile profile-view{
+    color: rgb(36,40,43);
+}
+#profile{
+background: rgb(36,39,58);
+    background: -moz-linear-gradient(180deg, rgba(36,39,58,1) 35%, rgba(33,37,41,1) 63%);
+    background: -webkit-linear-gradient(180deg, rgba(36,39,58,1) 35%, rgba(33,37,41,1) 63%);
+    background: linear-gradient(180deg, rgba(36,39,58,1) 35%, rgba(33,37,41,1) 63%);
+    filter: progid:DXImageTransform.Microsoft.gradient(startColorstr="#24273a",endColorstr="#212529",GradientType=1);    
+    border-radius:4px;
+    box-shadow:3px 3px 4px rgba(0,0,0,0.2);
+}
+
+h1{
+    color: rgb(255,255,255);
+}
+h4{
+    color: rgb(155,166,200);
+}
+.form-group{
+    color: rgb(255,255,255);
+    font-size: 18px;
+}
+.fa fa-user-circle{
+    font-size: 24px;    
+}
+.fas fa-spell-check{
+    font-size: 24px;
+}
+.fas fa-address-book{
+    font-size: 24px;
+}
+.fas fa-phone{
+    font-size: 24px;
+}
+
+.fas fa-city{
+    font-size: 24px;
+}
+
+
